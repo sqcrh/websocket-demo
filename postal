@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# get project name
+PROJECT=$(basename $(pwd))
+
+# function to enter container (try bash first, if not use sh)
+function enter(){
+  if docker-compose -p $PROJECT -f stack/development.yml exec $1 bash -c ls &> /dev/null; then
+    docker-compose -p $PROJECT -f stack/development.yml exec $1 bash
+  else
+    docker-compose -p $PROJECT -f stack/development.yml exec $1 sh
+  fi
+}
+
+# proxy requets to docker-compose and add a few extra commands
+if [ "$1" = "launch" ]; then
+  # bring docker stack up cleanly
+  docker-compose -p $PROJECT -f stack/development.yml down --remove-orphans
+  docker-compose -p $PROJECT -f stack/development.yml build
+  docker-compose -p $PROJECT -f stack/development.yml up -d --force-recreate
+elif [ "$1" = "enter" ]; then
+  # enter a service container (attempt to enter using enter.sh script else enter using root)
+  if docker-compose -p $PROJECT -f stack/development.yml exec $2 ls /enter.sh &> /dev/null; then
+    docker-compose -p $PROJECT -f stack/development.yml exec $2 bash /enter.sh $USER $UID
+  else
+    enter $2
+  fi
+elif [ "$1" = "root" ]; then
+  # enter a service container as root
+  enter $2
+elif [ -z "$1" ] || [ "$1" = "help" ]; then
+  # help instructions
+  echo "Usage: postal launch | up | down | enter [service] | root [service] | logs -f | help"
+  echo "All unmatched commands are proxied to docker compose with '-f stack/development.yml' set."
+else
+  # proxy all other commands to compose (down, logs, etc.)
+  docker-compose -p $PROJECT -f stack/development.yml $@
+fi
